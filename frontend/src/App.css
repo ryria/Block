@@ -562,3 +562,73 @@ a:hover { text-decoration: underline; }
 
 /* ── Days overdue ───────────────────────────────────────────────────────────── */
 .days-overdue { color: #dc2626; font-weight: 600; }
+
+/* ── Report layout ──────────────────────────────────────────────────────────── */
+.report-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
+
+.report-empty { padding: 1.5rem 0; font-size: 0.875rem; }
+
+/* ── Summary metric table ────────────────────────────────────────────────────── */
+.report-summary-table { border: none; }
+.report-summary-table td { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.report-summary-table tbody tr:last-child td { border-bottom: none; }
+.report-metric-label { color: var(--text-muted); font-size: 0.8rem; width: 65%; }
+.report-metric-value { font-weight: 600; font-size: 0.95rem; text-align: right; }
+.report-metric-value--warn { color: #d97706; }
+.report-metric-value--isp { color: #dc2626; }
+
+/* ── Horizontal bar chart ────────────────────────────────────────────────────── */
+.hbar { display: flex; flex-direction: column; gap: 0.55rem; }
+
+.hbar__row {
+  display: grid;
+  grid-template-columns: 140px 1fr 2.5rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.hbar__label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbar__track {
+  height: 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.hbar__fill {
+  height: 100%;
+  border-radius: 6px;
+  background: var(--primary);
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+
+.hbar__value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}

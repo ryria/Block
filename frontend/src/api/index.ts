@@ -216,6 +216,11 @@ export const actionsApi = {
       (a, b) => new Date(b.triggered_at).getTime() - new Date(a.triggered_at).getTime(),
     )),
 
+  listAll: () =>
+    delay([...actions].sort(
+      (a, b) => new Date(b.triggered_at).getTime() - new Date(a.triggered_at).getTime(),
+    )),
+
   create: (data: { case_id: number; type: ActionType; note?: string }) => {
     const action: CaseAction = {
       id: nextActionId++,

@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, NavLink } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import CaseDetail from "./pages/CaseDetail";
 import NewCase from "./pages/NewCase";
+import Reports from "./pages/Reports";
 import "./App.css";
 
 export default function App() {
@@ -22,6 +23,9 @@ export default function App() {
             <NavLink to="/" end className={({ isActive }) => isActive ? "nav__link nav__link--active" : "nav__link"}>
               Dashboard
             </NavLink>
+            <NavLink to="/reports" className={({ isActive }) => isActive ? "nav__link nav__link--active" : "nav__link"}>
+              Reports
+            </NavLink>
           </div>
         </nav>
 
@@ -30,6 +34,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/cases/new" element={<NewCase />} />
             <Route path="/cases/:id" element={<CaseDetail />} />
+            <Route path="/reports" element={<Reports />} />
           </Routes>
         </main>
       </div>
