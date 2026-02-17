@@ -2,7 +2,8 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [master]
+    branches: [master, claude/clear-project-7W6zX]
+  workflow_dispatch:
 
 permissions:
   contents: read
