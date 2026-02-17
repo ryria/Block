@@ -1,4 +1,4 @@
-import type { Case, Transaction, User, Finding } from "../types";
+import type { Case, Transaction, User, Finding, CaseAction, ActionType } from "../types";
 import { FINDING_PRIORITY } from "../types";
 
 const UNSUBSTANTIATED: Finding = "unsubstantiated";
@@ -12,24 +12,34 @@ const seedUsers: User[] = [
 ];
 
 const seedTransactions: Transaction[] = [
-  { id: 1, case_id: 1, reference: "TXN-10041", description: "Till short £42.00", amount: "£42.00", transaction_date: "2024-11-01", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
-  { id: 2, case_id: 1, reference: "TXN-10055", description: "Till short £18.50", amount: "£18.50", transaction_date: "2024-11-04", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
-  { id: 3, case_id: 2, reference: "TXN-20012", description: "Account lookup — no active call", amount: null, transaction_date: "2024-10-22", pipeline_status: "reviewed", finding: "non_compliance", notes: "Confirmed no call in progress at time of access.", created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
-  { id: 4, case_id: 2, reference: "TXN-20019", description: "Address change — no active call", amount: null, transaction_date: "2024-10-23", pipeline_status: "under_review", finding: "unsubstantiated", notes: null, created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
-  { id: 5, case_id: 3, reference: "TXN-30001", description: "Missing stock — headphones x3", amount: "£210.00", transaction_date: "2024-10-01", pipeline_status: "reviewed", finding: "ISP", notes: "CCTV confirms subject removed items from stockroom.", created_at: "2024-10-05T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
-  { id: 6, case_id: 3, reference: "TXN-30002", description: "Missing stock — tablet x1", amount: "£349.00", transaction_date: "2024-10-08", pipeline_status: "reviewed", finding: "non_compliance", notes: "Procedural breach confirmed; theft not proven for this item.", created_at: "2024-10-10T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
-  { id: 7, case_id: 3, reference: "TXN-30003", description: "Missing stock — cables", amount: "£55.00", transaction_date: "2024-10-15", pipeline_status: "reviewed", finding: "unsubstantiated", notes: "Stock discrepancy attributed to data entry error.", created_at: "2024-10-18T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
-  { id: 8, case_id: 5, reference: "TXN-50001", description: "Refund £85.00 to alternate card", amount: "£85.00", transaction_date: "2024-10-28", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
-  { id: 9, case_id: 5, reference: "TXN-50002", description: "Refund £120.00 to alternate card", amount: "£120.00", transaction_date: "2024-10-30", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
-  { id: 10, case_id: 5, reference: "TXN-50003", description: "Refund £34.00 to alternate card", amount: "£34.00", transaction_date: "2024-11-02", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
+  { id: 1, case_id: 1, reference: "TXN-10041", description: "Till short", transaction_date: "2024-11-01", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
+  { id: 2, case_id: 1, reference: "TXN-10055", description: "Till short", transaction_date: "2024-11-04", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
+  { id: 3, case_id: 2, reference: "TXN-20012", description: "Account lookup — no active call", transaction_date: "2024-10-22", pipeline_status: "reviewed", finding: "non_compliance", notes: "Confirmed no call in progress at time of access.", created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
+  { id: 4, case_id: 2, reference: "TXN-20019", description: "Address change — no active call", transaction_date: "2024-10-23", pipeline_status: "under_review", finding: "unsubstantiated", notes: null, created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
+  { id: 5, case_id: 3, reference: "TXN-30001", description: "Missing stock — headphones x3", transaction_date: "2024-10-01", pipeline_status: "reviewed", finding: "ISP", notes: "CCTV confirms subject removed items from stockroom.", created_at: "2024-10-05T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
+  { id: 6, case_id: 3, reference: "TXN-30002", description: "Missing stock — tablet x1", transaction_date: "2024-10-08", pipeline_status: "reviewed", finding: "non_compliance", notes: "Procedural breach confirmed; theft not proven for this item.", created_at: "2024-10-10T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
+  { id: 7, case_id: 3, reference: "TXN-30003", description: "Missing stock — cables", transaction_date: "2024-10-15", pipeline_status: "reviewed", finding: "unsubstantiated", notes: "Stock discrepancy attributed to data entry error.", created_at: "2024-10-18T10:00:00Z", updated_at: "2024-11-10T10:00:00Z" },
+  { id: 8, case_id: 5, reference: "TXN-50001", description: "Refund to alternate card", transaction_date: "2024-10-28", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
+  { id: 9, case_id: 5, reference: "TXN-50002", description: "Refund to alternate card", transaction_date: "2024-10-30", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
+  { id: 10, case_id: 5, reference: "TXN-50003", description: "Refund to alternate card", transaction_date: "2024-11-02", pipeline_status: "awaiting_review", finding: "unsubstantiated", notes: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
 ];
 
 const seedCases: Case[] = [
-  { id: 1, reference: "CASE-0001", title: "Till discrepancy review", description: "Multiple till shortfalls flagged over a 2-week period.", subject_name: "Tom Hendricks", pipeline_status: "new", finding: "unsubstantiated", assigned_user_id: null, assignee: null, transactions: [], created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
-  { id: 2, reference: "CASE-0002", title: "Unauthorised account access", description: "Agent accessed customer accounts outside of active call log.", subject_name: "Lisa Payne", pipeline_status: "under_review", finding: "non_compliance", assigned_user_id: 1, assignee: seedUsers[0], transactions: [], created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
-  { id: 3, reference: "CASE-0003", title: "Suspected stock theft", description: "High-value items repeatedly missing from shift counts. CCTV reviewed.", subject_name: "Marcus Webb", pipeline_status: "awaiting_finalisation", finding: "ISP", assigned_user_id: 3, assignee: seedUsers[2], transactions: [], created_at: "2024-10-05T10:00:00Z", updated_at: "2024-11-12T10:00:00Z" },
-  { id: 4, reference: "CASE-0004", title: "Potential data breach — customer PII shared", description: "Customer complaint that agent disclosed personal data to a third party.", subject_name: "Chloe Nkosi", pipeline_status: "triage", finding: "unsubstantiated", assigned_user_id: 2, assignee: seedUsers[1], transactions: [], created_at: "2024-11-16T10:00:00Z", updated_at: "2024-11-16T10:00:00Z" },
-  { id: 5, reference: "CASE-0005", title: "Refund manipulation", description: "Refunds processed to personal card not matching original payment method.", subject_name: "Ben Castillo", pipeline_status: "awaiting_allocation", finding: "unsubstantiated", assigned_user_id: null, assignee: null, transactions: [], created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
+  { id: 1, reference: "CASE-0001", title: "Till discrepancy review", description: "Multiple till shortfalls flagged over a 2-week period.", subject_name: "Tom Hendricks", pipeline_status: "new", finding: "unsubstantiated", assigned_user_id: null, assignee: null, transactions: [], closed_at: null, created_at: "2024-11-05T10:00:00Z", updated_at: "2024-11-05T10:00:00Z" },
+  { id: 2, reference: "CASE-0002", title: "Unauthorised account access", description: "Agent accessed customer accounts outside of active call log.", subject_name: "Lisa Payne", pipeline_status: "under_review", finding: "non_compliance", assigned_user_id: 1, assignee: seedUsers[0], transactions: [], closed_at: null, created_at: "2024-10-28T10:00:00Z", updated_at: "2024-11-07T10:00:00Z" },
+  { id: 3, reference: "CASE-0003", title: "Suspected stock theft", description: "High-value items repeatedly missing from shift counts. CCTV reviewed.", subject_name: "Marcus Webb", pipeline_status: "closed", finding: "ISP", assigned_user_id: 3, assignee: seedUsers[2], transactions: [], closed_at: "2024-11-20T14:00:00Z", created_at: "2024-10-05T10:00:00Z", updated_at: "2024-11-20T14:00:00Z" },
+  { id: 4, reference: "CASE-0004", title: "Potential data breach — customer PII shared", description: "Customer complaint that agent disclosed personal data to a third party.", subject_name: "Chloe Nkosi", pipeline_status: "triage", finding: "unsubstantiated", assigned_user_id: 2, assignee: seedUsers[1], transactions: [], closed_at: null, created_at: "2024-11-16T10:00:00Z", updated_at: "2024-11-16T10:00:00Z" },
+  { id: 5, reference: "CASE-0005", title: "Refund manipulation", description: "Refunds processed to personal card not matching original payment method.", subject_name: "Ben Castillo", pipeline_status: "awaiting_allocation", finding: "unsubstantiated", assigned_user_id: null, assignee: null, transactions: [], closed_at: null, created_at: "2024-11-03T10:00:00Z", updated_at: "2024-11-03T10:00:00Z" },
+];
+
+const seedActions: CaseAction[] = [
+  { id: 1, case_id: 1, type: "notification", sent_to: ["B&C", "ER"], triggered_at: "2024-11-05T10:00:00Z", note: null },
+  { id: 2, case_id: 2, type: "notification", sent_to: ["B&C", "ER"], triggered_at: "2024-10-28T10:00:00Z", note: null },
+  { id: 3, case_id: 2, type: "pause", sent_to: ["B&C", "ER"], triggered_at: "2024-11-01T11:00:00Z", note: "Awaiting HR decision before progressing." },
+  { id: 4, case_id: 3, type: "notification", sent_to: ["B&C", "ER"], triggered_at: "2024-10-05T10:00:00Z", note: null },
+  { id: 5, case_id: 3, type: "withdraw", sent_to: ["B&C", "ER"], triggered_at: "2024-11-18T09:30:00Z", note: "Case concluded — proceeding to outcome." },
+  { id: 6, case_id: 4, type: "notification", sent_to: ["B&C", "ER"], triggered_at: "2024-11-16T10:00:00Z", note: null },
+  { id: 7, case_id: 5, type: "notification", sent_to: ["B&C", "ER"], triggered_at: "2024-11-03T10:00:00Z", note: null },
 ];
 
 // ── In-memory Store ───────────────────────────────────────────────────────────
@@ -37,11 +47,13 @@ const seedCases: Case[] = [
 let users: User[] = seedUsers.map((u) => ({ ...u }));
 let transactions: Transaction[] = seedTransactions.map((t) => ({ ...t }));
 let cases: Case[] = seedCases.map((c) => ({ ...c }));
+let actions: CaseAction[] = seedActions.map((a) => ({ ...a }));
 
 let nextUserId = 4;
 let nextCaseId = 6;
 let nextTxnId = 11;
 let nextCaseNum = 6;
+let nextActionId = 8;
 
 function now() {
   return new Date().toISOString();
@@ -111,6 +123,7 @@ export const casesApi = {
       finding: UNSUBSTANTIATED,
       transactions: [],
       assignee: users.find((u) => u.id === data.assigned_user_id) ?? null,
+      closed_at: null,
       created_at: now(),
       updated_at: now(),
       subject_name: data.subject_name,
@@ -119,13 +132,32 @@ export const casesApi = {
       assigned_user_id: data.assigned_user_id ?? null,
     };
     cases.push(c);
+    // Auto-notify B&C and ER when a new case is opened
+    actions.push({
+      id: nextActionId++,
+      case_id: c.id,
+      type: "notification",
+      sent_to: ["B&C", "ER"],
+      triggered_at: c.created_at,
+      note: null,
+    });
     return delay({ ...c });
   },
 
   update: (id: number, data: Partial<Case>) => {
     const idx = cases.findIndex((c) => c.id === id);
     if (idx === -1) return Promise.reject(new Error("Case not found"));
-    cases[idx] = { ...cases[idx], ...data, updated_at: now() };
+    const prev = cases[idx];
+    const updated = { ...prev, ...data, updated_at: now() };
+    // Auto-set closed_at when transitioning to closed
+    if (data.pipeline_status === "closed" && prev.pipeline_status !== "closed") {
+      updated.closed_at = updated.updated_at;
+    }
+    // Clear closed_at if reopened
+    if (data.pipeline_status && data.pipeline_status !== "closed" && prev.pipeline_status === "closed") {
+      updated.closed_at = null;
+    }
+    cases[idx] = updated;
     const [hydrated] = hydrateCases([cases[idx]]);
     return delay({ ...hydrated });
   },
@@ -133,6 +165,7 @@ export const casesApi = {
   delete: (id: number) => {
     cases = cases.filter((c) => c.id !== id);
     transactions = transactions.filter((t) => t.case_id !== id);
+    actions = actions.filter((a) => a.case_id !== id);
     return delay(undefined as void);
   },
 };
@@ -140,7 +173,7 @@ export const casesApi = {
 // ── Transactions API ──────────────────────────────────────────────────────────
 
 export const transactionsApi = {
-  create: (data: { case_id: number; reference: string; description?: string; amount?: string; transaction_date?: string }) => {
+  create: (data: { case_id: number; reference: string; description?: string; transaction_date?: string }) => {
     const txn: Transaction = {
       id: nextTxnId++,
       pipeline_status: "awaiting_review",
@@ -149,7 +182,6 @@ export const transactionsApi = {
       created_at: now(),
       updated_at: now(),
       description: data.description ?? null,
-      amount: data.amount ?? null,
       transaction_date: data.transaction_date ?? null,
       case_id: data.case_id,
       reference: data.reference,
@@ -173,5 +205,27 @@ export const transactionsApi = {
     transactions = transactions.filter((t) => t.id !== id);
     recalcCaseFinding(txn.case_id);
     return delay(undefined as void);
+  },
+};
+
+// ── Actions API ───────────────────────────────────────────────────────────────
+
+export const actionsApi = {
+  list: (caseId: number) =>
+    delay([...actions].filter((a) => a.case_id === caseId).sort(
+      (a, b) => new Date(b.triggered_at).getTime() - new Date(a.triggered_at).getTime(),
+    )),
+
+  create: (data: { case_id: number; type: ActionType; note?: string }) => {
+    const action: CaseAction = {
+      id: nextActionId++,
+      case_id: data.case_id,
+      type: data.type,
+      sent_to: ["B&C", "ER"],
+      triggered_at: now(),
+      note: data.note ?? null,
+    };
+    actions.push(action);
+    return delay({ ...action });
   },
 };

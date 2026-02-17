@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { casesApi, transactionsApi, usersApi } from "../api";
-import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding } from "../types";
+import { casesApi, transactionsApi, usersApi, actionsApi } from "../api";
+import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding, CaseAction, ActionType } from "../types";
 import {
   CASE_STATUSES, TRANSACTION_STATUSES, FINDINGS,
-  labelCaseStatus, labelTransactionStatus, labelFinding,
+  labelCaseStatus, labelTransactionStatus, labelFinding, labelActionType,
 } from "../types";
 import FindingBadge from "../components/FindingBadge";
 import StatusBadge from "../components/StatusBadge";
@@ -16,29 +16,84 @@ export default function CaseDetail() {
   const navigate = useNavigate();
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [caseActions, setCaseActions] = useState<CaseAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [showEditCase, setShowEditCase] = useState(false);
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
+  const [triggerAction, setTriggerAction] = useState<ActionType | null>(null);
+
+  // Inline case edit state
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    subject_name: "",
+    pipeline_status: "new" as CaseStatus,
+    assigned_user_id: "" as string | number,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const load = () => {
     if (!id) return;
     setLoading(true);
-    Promise.all([casesApi.get(Number(id)), usersApi.list()])
-      .then(([c, u]) => { setCaseData(c); setUsers(u); })
+    Promise.all([casesApi.get(Number(id)), usersApi.list(), actionsApi.list(Number(id))])
+      .then(([c, u, a]) => {
+        setCaseData(c);
+        setUsers(u);
+        setCaseActions(a);
+        setEditForm({
+          title: c.title,
+          description: c.description ?? "",
+          subject_name: c.subject_name,
+          pipeline_status: c.pipeline_status,
+          assigned_user_id: c.assigned_user_id ?? "",
+        });
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, [id]);
 
+  const isDirty = caseData && (
+    editForm.title !== caseData.title ||
+    editForm.description !== (caseData.description ?? "") ||
+    editForm.subject_name !== caseData.subject_name ||
+    editForm.pipeline_status !== caseData.pipeline_status ||
+    String(editForm.assigned_user_id) !== String(caseData.assigned_user_id ?? "")
+  );
+
+  const handleSaveCase = async () => {
+    if (!caseData) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await casesApi.update(caseData.id, {
+        ...editForm,
+        assigned_user_id: editForm.assigned_user_id ? Number(editForm.assigned_user_id) : null,
+      });
+      load();
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteCase = async () => {
     if (!caseData) return;
     if (!confirm(`Delete case ${caseData.reference}? This cannot be undone.`)) return;
     await casesApi.delete(caseData.id);
     navigate("/");
+  };
+
+  const handleTriggerAction = async (type: ActionType, note?: string) => {
+    if (!caseData) return;
+    await actionsApi.create({ case_id: caseData.id, type, note });
+    const updated = await actionsApi.list(caseData.id);
+    setCaseActions(updated);
   };
 
   if (loading) return <div className="loading">Loading case…</div>;
@@ -66,10 +121,7 @@ export default function CaseDetail() {
           <h1 className="page__title">{caseData.title}</h1>
           <p className="page__subtitle">Staff member: <strong>{caseData.subject_name}</strong></p>
         </div>
-        <div className="btn-group">
-          <button className="btn btn--secondary" onClick={() => setShowEditCase(true)}>Edit Case</button>
-          <button className="btn btn--danger" onClick={handleDeleteCase}>Delete</button>
-        </div>
+        <button className="btn btn--danger" onClick={handleDeleteCase}>Delete</button>
       </div>
 
       {/* Pipeline */}
@@ -80,22 +132,87 @@ export default function CaseDetail() {
 
       {/* Details grid */}
       <div className="detail-grid">
+        {/* Inline editable case details */}
         <div className="card">
           <h2 className="card__title">Case Details</h2>
-          <dl className="dl">
-            <dt>Staff Member</dt>
-            <dd>{caseData.subject_name}</dd>
-            <dt>Description</dt>
-            <dd>{caseData.description ?? <span className="muted">—</span>}</dd>
-            <dt>Analyst</dt>
-            <dd>{caseData.assignee?.name ?? <span className="muted">Unassigned</span>}</dd>
+          {saveError && <div className="alert alert--error" style={{ marginBottom: "1rem" }}>{saveError}</div>}
+          <div className="inline-edit-form">
+            <label className="form-label">
+              Title
+              <input
+                className="input"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              />
+            </label>
+            <label className="form-label">
+              Staff Member
+              <input
+                className="input"
+                value={editForm.subject_name}
+                onChange={(e) => setEditForm({ ...editForm, subject_name: e.target.value })}
+              />
+            </label>
+            <label className="form-label">
+              Pipeline Status
+              <select
+                className="select"
+                value={editForm.pipeline_status}
+                onChange={(e) => setEditForm({ ...editForm, pipeline_status: e.target.value as CaseStatus })}
+              >
+                {CASE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{labelCaseStatus(s)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-label">
+              Assigned Analyst
+              <select
+                className="select"
+                value={editForm.assigned_user_id}
+                onChange={(e) => setEditForm({ ...editForm, assigned_user_id: e.target.value })}
+              >
+                <option value="">Unassigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-label inline-edit-full">
+              Description
+              <textarea
+                className="textarea"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+              />
+            </label>
+          </div>
+
+          <dl className="dl" style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
             <dt>Finding</dt>
             <dd><FindingBadge finding={caseData.finding} /></dd>
-            <dt>Created</dt>
+            <dt>Opened</dt>
             <dd>{formatDate(caseData.created_at)}</dd>
             <dt>Last Updated</dt>
             <dd>{formatDate(caseData.updated_at)}</dd>
+            {caseData.closed_at && (
+              <>
+                <dt>Closed</dt>
+                <dd>{formatDate(caseData.closed_at)}</dd>
+              </>
+            )}
           </dl>
+
+          <div className="inline-edit-actions">
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={handleSaveCase}
+              disabled={!isDirty || saving}
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
         </div>
 
         {/* Finding info */}
@@ -113,6 +230,34 @@ export default function CaseDetail() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Actions */}
+      <div className="card">
+        <div className="card__header">
+          <h2 className="card__title">
+            Actions
+            <span className="count-badge">{caseActions.length}</span>
+          </h2>
+          <div className="btn-group">
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("pause")}>
+              Pause
+            </button>
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("withdraw")}>
+              Withdraw
+            </button>
+          </div>
+        </div>
+
+        {caseActions.length === 0 ? (
+          <p className="muted">No actions recorded.</p>
+        ) : (
+          <div className="action-list">
+            {caseActions.map((a) => (
+              <ActionRow key={a.id} action={a} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Transactions */}
@@ -148,12 +293,14 @@ export default function CaseDetail() {
       </div>
 
       {/* Modals */}
-      {showEditCase && (
-        <EditCaseModal
-          caseData={caseData}
-          users={users}
-          onClose={() => setShowEditCase(false)}
-          onSaved={() => { setShowEditCase(false); load(); }}
+      {triggerAction && (
+        <TriggerActionModal
+          type={triggerAction}
+          onClose={() => setTriggerAction(null)}
+          onConfirm={async (note) => {
+            await handleTriggerAction(triggerAction, note);
+            setTriggerAction(null);
+          }}
         />
       )}
       {showAddTxn && (
@@ -174,6 +321,29 @@ export default function CaseDetail() {
   );
 }
 
+// ── Action Row ─────────────────────────────────────────────────────────────────
+
+function ActionRow({ action }: { action: CaseAction }) {
+  const typeClass = action.type === "notification"
+    ? "action-badge--info"
+    : action.type === "pause"
+    ? "action-badge--amber"
+    : "action-badge--red";
+
+  return (
+    <div className="action-row">
+      <div className="action-row__left">
+        <span className={`action-badge ${typeClass}`}>{labelActionType(action.type)}</span>
+        <span className="action-row__sent">Sent to: {action.sent_to.join(", ")}</span>
+      </div>
+      <div className="action-row__right">
+        {action.note && <span className="action-row__note">{action.note}</span>}
+        <span className="action-row__date muted">{formatDate(action.triggered_at)}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Transaction Row ────────────────────────────────────────────────────────────
 
 function TransactionRow({
@@ -185,7 +355,6 @@ function TransactionRow({
         <div className="txn-card__ref">
           <strong>{txn.reference}</strong>
           {txn.transaction_date && <span className="muted"> — {txn.transaction_date}</span>}
-          {txn.amount && <span className="txn-amount">{txn.amount}</span>}
         </div>
         <div className="txn-card__badges">
           <StatusBadge status={txn.pipeline_status} size="sm" />
@@ -211,71 +380,39 @@ function TransactionRow({
   );
 }
 
-// ── Edit Case Modal ────────────────────────────────────────────────────────────
+// ── Trigger Action Modal ───────────────────────────────────────────────────────
 
-function EditCaseModal({ caseData, users, onClose, onSaved }: {
-  caseData: Case; users: User[]; onClose: () => void; onSaved: () => void;
+function TriggerActionModal({ type, onClose, onConfirm }: {
+  type: ActionType; onClose: () => void; onConfirm: (note?: string) => Promise<void>;
 }) {
-  const [form, setForm] = useState({
-    title: caseData.title,
-    description: caseData.description ?? "",
-    subject_name: caseData.subject_name,
-    pipeline_status: caseData.pipeline_status as CaseStatus,
-    assigned_user_id: caseData.assigned_user_id ?? "",
-  });
+  const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSave = async () => {
+  const handleConfirm = async () => {
     setSaving(true);
-    setError(null);
-    try {
-      await casesApi.update(caseData.id, {
-        ...form,
-        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
-      });
-      onSaved();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
+    await onConfirm(note.trim() || undefined);
+    setSaving(false);
   };
 
   return (
-    <Modal title="Edit Case" onClose={onClose}>
-      {error && <div className="alert alert--error">{error}</div>}
-      <div className="form-grid">
-        <label className="form-label">
-          Title
-          <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </label>
-        <label className="form-label">
-          Staff Member
-          <input className="input" value={form.subject_name} onChange={(e) => setForm({ ...form, subject_name: e.target.value })} />
-        </label>
-        <label className="form-label">
-          Pipeline Status
-          <select className="select" value={form.pipeline_status} onChange={(e) => setForm({ ...form, pipeline_status: e.target.value as CaseStatus })}>
-            {CASE_STATUSES.map((s) => <option key={s} value={s}>{labelCaseStatus(s)}</option>)}
-          </select>
-        </label>
-        <label className="form-label">
-          Assigned Analyst
-          <select className="select" value={form.assigned_user_id} onChange={(e) => setForm({ ...form, assigned_user_id: e.target.value })}>
-            <option value="">Unassigned</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
-        <label className="form-label form-label--full">
-          Description
-          <textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
-        </label>
-      </div>
+    <Modal title={`${labelActionType(type)} — Send to B&C and ER`} onClose={onClose}>
+      <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
+        This action will be recorded and sent to <strong>B&C</strong> and <strong>ER</strong>.
+      </p>
+      <label className="form-label">
+        Note <span className="muted">(optional)</span>
+        <textarea
+          className="textarea"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          placeholder="Reason or additional context…"
+        />
+      </label>
       <div className="modal__footer">
         <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save Changes"}
+        <button className="btn btn--primary" onClick={handleConfirm} disabled={saving}>
+          {saving ? "Sending…" : `Confirm ${labelActionType(type)}`}
         </button>
       </div>
     </Modal>
@@ -287,9 +424,7 @@ function EditCaseModal({ caseData, users, onClose, onSaved }: {
 function AddTransactionModal({ caseId, onClose, onSaved }: {
   caseId: number; onClose: () => void; onSaved: () => void;
 }) {
-  const [form, setForm] = useState({
-    reference: "", description: "", amount: "", transaction_date: "",
-  });
+  const [form, setForm] = useState({ reference: "", description: "", transaction_date: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -314,10 +449,6 @@ function AddTransactionModal({ caseId, onClose, onSaved }: {
         <label className="form-label">
           Reference *
           <input className="input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="TXN-00001" />
-        </label>
-        <label className="form-label">
-          Amount
-          <input className="input" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="£0.00" />
         </label>
         <label className="form-label">
           Transaction Date
@@ -346,7 +477,6 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
   const [form, setForm] = useState({
     reference: txn.reference,
     description: txn.description ?? "",
-    amount: txn.amount ?? "",
     transaction_date: txn.transaction_date ?? "",
     pipeline_status: txn.pipeline_status as TransactionStatus,
     finding: txn.finding as Finding,
@@ -375,10 +505,6 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
         <label className="form-label">
           Reference
           <input className="input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
-        </label>
-        <label className="form-label">
-          Amount
-          <input className="input" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
         </label>
         <label className="form-label">
           Transaction Date
@@ -416,7 +542,5 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+  return iso.slice(0, 10);
 }

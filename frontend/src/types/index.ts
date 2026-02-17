@@ -11,6 +11,8 @@ export type TransactionStatus = "awaiting_review" | "under_review" | "reviewed";
 
 export type Finding = "unsubstantiated" | "non_compliance" | "ISP";
 
+export type ActionType = "notification" | "pause" | "withdraw";
+
 export interface User {
   id: number;
   name: string;
@@ -24,7 +26,6 @@ export interface Transaction {
   case_id: number;
   reference: string;
   description: string | null;
-  amount: string | null;
   transaction_date: string | null;
   pipeline_status: TransactionStatus;
   finding: Finding;
@@ -45,8 +46,18 @@ export interface Case {
   assignee: User | null;
   transactions: Transaction[];
   transaction_count?: number;
+  closed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CaseAction {
+  id: number;
+  case_id: number;
+  type: ActionType;
+  sent_to: string[];
+  triggered_at: string;
+  note: string | null;
 }
 
 export const CASE_STATUSES: CaseStatus[] = [
@@ -102,4 +113,13 @@ export function labelFinding(f: Finding): string {
     ISP: "ISP",
   };
   return map[f];
+}
+
+export function labelActionType(t: ActionType): string {
+  const map: Record<ActionType, string> = {
+    notification: "Case Opened",
+    pause: "Pause",
+    withdraw: "Withdraw",
+  };
+  return map[t];
 }
