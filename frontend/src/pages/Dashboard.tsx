@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { casesApi, usersApi } from "../api";
-import type { Case, CaseStatus, User } from "../types";
-import { CASE_STATUSES, labelCaseStatus, labelSubjectType } from "../types";
+import type { Case, User } from "../types";
+import { CASE_STATUSES, labelCaseStatus } from "../types";
 import FindingBadge from "../components/FindingBadge";
 import StatusBadge from "../components/StatusBadge";
 
@@ -14,7 +14,6 @@ export default function Dashboard() {
 
   const [filterStatus, setFilterStatus] = useState("");
   const [filterUser, setFilterUser] = useState("");
-  const [filterType, setFilterType] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -22,7 +21,6 @@ export default function Dashboard() {
       casesApi.list({
         status: filterStatus || undefined,
         assigned_user_id: filterUser ? Number(filterUser) : undefined,
-        subject_type: filterType || undefined,
       }),
       usersApi.list(),
     ])
@@ -31,7 +29,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [filterStatus, filterUser, filterType]);
+  useEffect(() => { load(); }, [filterStatus, filterUser]);
 
   const stats = {
     total: cases.length,
@@ -78,21 +76,16 @@ export default function Dashboard() {
             <option key={s} value={s}>{labelCaseStatus(s)}</option>
           ))}
         </select>
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="select">
-          <option value="">All Types</option>
-          <option value="retail">Retail</option>
-          <option value="contact_centre">Contact Centre</option>
-        </select>
         <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} className="select">
           <option value="">All Analysts</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>{u.name}</option>
           ))}
         </select>
-        {(filterStatus || filterType || filterUser) && (
+        {(filterStatus || filterUser) && (
           <button
             className="btn btn--ghost"
-            onClick={() => { setFilterStatus(""); setFilterType(""); setFilterUser(""); }}
+            onClick={() => { setFilterStatus(""); setFilterUser(""); }}
           >
             Clear filters
           </button>
@@ -112,7 +105,6 @@ export default function Dashboard() {
               <tr>
                 <th>Reference</th>
                 <th>Subject</th>
-                <th>Type</th>
                 <th>Status</th>
                 <th>Finding</th>
                 <th>Analyst</th>
@@ -131,9 +123,6 @@ export default function Dashboard() {
                   <td>
                     <div className="subject-name">{c.subject_name}</div>
                     <div className="subject-title">{c.title}</div>
-                  </td>
-                  <td>
-                    <span className="tag">{labelSubjectType(c.subject_type)}</span>
                   </td>
                   <td><StatusBadge status={c.pipeline_status} size="sm" /></td>
                   <td><FindingBadge finding={c.finding} size="sm" /></td>

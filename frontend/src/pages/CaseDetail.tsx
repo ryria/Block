@@ -4,7 +4,7 @@ import { casesApi, transactionsApi, usersApi } from "../api";
 import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding } from "../types";
 import {
   CASE_STATUSES, TRANSACTION_STATUSES, FINDINGS,
-  labelCaseStatus, labelTransactionStatus, labelFinding, labelSubjectType,
+  labelCaseStatus, labelTransactionStatus, labelFinding,
 } from "../types";
 import FindingBadge from "../components/FindingBadge";
 import StatusBadge from "../components/StatusBadge";
@@ -59,12 +59,12 @@ export default function CaseDetail() {
         <div>
           <div className="case-ref-row">
             <span className="case-ref">{caseData.reference}</span>
-            <span className="tag">{labelSubjectType(caseData.subject_type)}</span>
+            <span className="tag">Staff</span>
             <StatusBadge status={caseData.pipeline_status} />
             <FindingBadge finding={caseData.finding} />
           </div>
           <h1 className="page__title">{caseData.title}</h1>
-          <p className="page__subtitle">Subject: <strong>{caseData.subject_name}</strong></p>
+          <p className="page__subtitle">Staff member: <strong>{caseData.subject_name}</strong></p>
         </div>
         <div className="btn-group">
           <button className="btn btn--secondary" onClick={() => setShowEditCase(true)}>Edit Case</button>
@@ -83,6 +83,8 @@ export default function CaseDetail() {
         <div className="card">
           <h2 className="card__title">Case Details</h2>
           <dl className="dl">
+            <dt>Staff Member</dt>
+            <dd>{caseData.subject_name}</dd>
             <dt>Description</dt>
             <dd>{caseData.description ?? <span className="muted">—</span>}</dd>
             <dt>Analyst</dt>
@@ -218,7 +220,6 @@ function EditCaseModal({ caseData, users, onClose, onSaved }: {
     title: caseData.title,
     description: caseData.description ?? "",
     subject_name: caseData.subject_name,
-    subject_type: caseData.subject_type,
     pipeline_status: caseData.pipeline_status as CaseStatus,
     assigned_user_id: caseData.assigned_user_id ?? "",
   });
@@ -250,15 +251,8 @@ function EditCaseModal({ caseData, users, onClose, onSaved }: {
           <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </label>
         <label className="form-label">
-          Subject Name
+          Staff Member
           <input className="input" value={form.subject_name} onChange={(e) => setForm({ ...form, subject_name: e.target.value })} />
-        </label>
-        <label className="form-label">
-          Subject Type
-          <select className="select" value={form.subject_type} onChange={(e) => setForm({ ...form, subject_type: e.target.value })}>
-            <option value="retail">Retail</option>
-            <option value="contact_centre">Contact Centre</option>
-          </select>
         </label>
         <label className="form-label">
           Pipeline Status

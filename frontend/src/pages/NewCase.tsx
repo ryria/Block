@@ -10,7 +10,6 @@ export default function NewCase() {
     title: "",
     description: "",
     subject_name: "",
-    subject_type: "retail",
     assigned_user_id: "",
   });
   const [saving, setSaving] = useState(false);
@@ -32,7 +31,6 @@ export default function NewCase() {
         title: form.title,
         description: form.description || undefined,
         subject_name: form.subject_name,
-        subject_type: form.subject_type,
         assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
       });
       navigate(`/cases/${created.id}`);
@@ -67,24 +65,13 @@ export default function NewCase() {
             />
           </label>
           <label className="form-label">
-            Subject Name *
+            Staff Member *
             <input
               className="input"
               value={form.subject_name}
               onChange={(e) => setForm({ ...form, subject_name: e.target.value })}
-              placeholder="Full name of staff member"
+              placeholder="Full name"
             />
-          </label>
-          <label className="form-label">
-            Subject Type *
-            <select
-              className="select"
-              value={form.subject_type}
-              onChange={(e) => setForm({ ...form, subject_type: e.target.value })}
-            >
-              <option value="retail">Retail</option>
-              <option value="contact_centre">Contact Centre</option>
-            </select>
           </label>
           <label className="form-label">
             Assign Analyst

@@ -11,8 +11,6 @@ export type TransactionStatus = "awaiting_review" | "under_review" | "reviewed";
 
 export type Finding = "unsubstantiated" | "non_compliance" | "ISP";
 
-export type SubjectType = "retail" | "contact_centre";
-
 export interface User {
   id: number;
   name: string;
@@ -41,7 +39,6 @@ export interface Case {
   title: string;
   description: string | null;
   subject_name: string;
-  subject_type: SubjectType;
   pipeline_status: CaseStatus;
   finding: Finding;
   assigned_user_id: number | null;
@@ -105,8 +102,4 @@ export function labelFinding(f: Finding): string {
     ISP: "ISP",
   };
   return map[f];
-}
-
-export function labelSubjectType(t: SubjectType): string {
-  return t === "retail" ? "Retail" : "Contact Centre";
 }
