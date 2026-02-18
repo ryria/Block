@@ -135,8 +135,6 @@ function randomSeedData(): {
     const caseTs = JAN_2023 + Math.floor(rng() * (FEB_2026 - JAN_2023));
     const caseDate = new Date(caseTs);
     const caseDateStr = caseDate.toISOString();
-    const caseDateShort = caseDateStr.slice(0, 10);
-
     // Status: older cases skewed closed, recent cases skewed open
     const isRecent = caseTs > CUTOFF_90D;
     const closedChance = isRecent ? 0.1 : 0.55;
