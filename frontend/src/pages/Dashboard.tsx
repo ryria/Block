@@ -158,6 +158,7 @@ export default function Dashboard() {
                 <th>Finding</th>
                 <th>Analyst</th>
                 <th>Transactions</th>
+                <th>Hist. Tranches</th>
                 <th>Days Open</th>
                 <th>Updated</th>
               </tr>
@@ -179,7 +180,25 @@ export default function Dashboard() {
                     <td><StatusBadge status={c.pipeline_status} size="sm" /></td>
                     <td><FindingBadge finding={c.finding} size="sm" /></td>
                     <td>{c.assignee?.name ?? <span className="muted">Unassigned</span>}</td>
-                    <td className="center">{c.transaction_count ?? c.transactions?.length ?? 0}</td>
+                    <td>
+                      {(() => {
+                        const reviewed = (c.transactions ?? []).filter((t) => t.pipeline_status === "reviewed").length;
+                        const total = c.transaction_count ?? (c.transactions?.length ?? 0);
+                        return (
+                          <div className="txn-progress">
+                            <span className="txn-progress__label">{reviewed}/{total}</span>
+                            {total > 0 && (
+                              <div className="txn-progress__track">
+                                <div className="txn-progress__fill" style={{ width: `${(reviewed / total) * 100}%` }} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="center">
+                      {(c.tranches ?? []).filter((t) => t.type === "historical").length || <span className="muted">—</span>}
+                    </td>
                     <td className="center">
                       <span className={d !== null && d > 30 ? "days-overdue" : ""}>
                         {d !== null ? d : "—"}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { casesApi, transactionsApi, usersApi, actionsApi, bulkApi, tranchesApi } from "../api";
 import type { FauxTxnDetail } from "../api";
-import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding, CaseAction, ActionType, BehaviourFlag } from "../types";
+import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding, CaseAction, BehaviourFlag } from "../types";
 import {
   CASE_STATUSES, TRANSACTION_STATUSES, FINDINGS, BEHAVIOUR_FLAGS,
   labelCaseStatus, labelTransactionStatus, labelFinding, labelActionType, labelRecipient,
@@ -23,7 +23,7 @@ export default function CaseDetail() {
 
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
-  const [triggerAction, setTriggerAction] = useState<ActionType | null>(null);
+  const [triggerAction, setTriggerAction] = useState<{ type: "pause" | "resume"; recipient: "B&C" | "ER" } | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   // Inline case edit state
@@ -91,14 +91,12 @@ export default function CaseDetail() {
     navigate("/");
   };
 
-  const handleTriggerAction = async (type: ActionType, note?: string, transactionIds?: number[]) => {
+  const handleTriggerAction = async (type: "pause" | "resume", recipient: "B&C" | "ER", note?: string, transactionIds?: number[]) => {
     if (!caseData) return;
-    const recipient =
-      type === "pause" ? "ER" as const :
-      type === "release_withdraw" ? "B&C" as const : "all" as const;
     await actionsApi.create({ case_id: caseData.id, type, recipient, transaction_ids: transactionIds, note });
     const updated = await actionsApi.list(caseData.id);
     setCaseActions(updated);
+    load();
   };
 
   if (loading) return <div className="loading">Loading case…</div>;
@@ -261,12 +259,10 @@ export default function CaseDetail() {
             <span className="count-badge">{caseActions.length}</span>
           </h2>
           <div className="btn-group">
-            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("pause")}>
-              Pause
-            </button>
-            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("release_withdraw")}>
-              Release / Withdraw
-            </button>
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction({ type: "pause", recipient: "B&C" })}>Pause B&C</button>
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction({ type: "pause", recipient: "ER" })}>Pause ER</button>
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction({ type: "resume", recipient: "B&C" })}>Resume B&C</button>
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction({ type: "resume", recipient: "ER" })}>Resume ER</button>
           </div>
         </div>
 
@@ -346,11 +342,12 @@ export default function CaseDetail() {
       {/* Modals */}
       {triggerAction && (
         <TriggerActionModal
-          type={triggerAction}
+          type={triggerAction.type}
+          recipient={triggerAction.recipient}
           transactions={caseData.transactions}
           onClose={() => setTriggerAction(null)}
           onConfirm={async (note, transactionIds) => {
-            await handleTriggerAction(triggerAction, note, transactionIds);
+            await handleTriggerAction(triggerAction.type, triggerAction.recipient, note, transactionIds);
             setTriggerAction(null);
           }}
         />
@@ -386,7 +383,7 @@ export default function CaseDetail() {
 function ActionRow({ action, caseTransactions }: { action: CaseAction; caseTransactions: Transaction[] }) {
   const typeClass =
     action.type === "notification" ? "action-badge--info" :
-    action.type === "pause" ? "action-badge--amber" : "action-badge--red";
+    action.type === "pause" ? "action-badge--amber" : "action-badge--green";
   const recipientClass =
     action.recipient === "ER" ? "recipient-badge--er" :
     action.recipient === "B&C" ? "recipient-badge--bc" : "recipient-badge--all";
@@ -459,9 +456,10 @@ function TransactionRow({
 // ── Trigger Action Modal ───────────────────────────────────────────────────────
 
 function TriggerActionModal({
-  type, transactions, onClose, onConfirm,
+  type, recipient, transactions, onClose, onConfirm,
 }: {
-  type: ActionType;
+  type: "pause" | "resume";
+  recipient: "B&C" | "ER";
   transactions: Transaction[];
   onClose: () => void;
   onConfirm: (note?: string, transactionIds?: number[]) => Promise<void>;
@@ -473,18 +471,18 @@ function TriggerActionModal({
   const toggleTxn = (id: number) =>
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
-  const recipientLabel = type === "pause" ? "ER" : type === "release_withdraw" ? "B&C" : "B&C & ER";
-
   const handleConfirm = async () => {
     setSaving(true);
     await onConfirm(note.trim() || undefined, selectedIds.length ? selectedIds : undefined);
     setSaving(false);
   };
 
+  const title = `${type === "pause" ? "Pause" : "Resume"} — ${recipient}`;
+
   return (
-    <Modal title={`${labelActionType(type)} — Send to ${recipientLabel}`} onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
-        This action will be sent to <strong>{recipientLabel}</strong>.
+        This action will be sent to <strong>{recipient}</strong>.
       </p>
       {transactions.length > 0 && (
         <div style={{ marginBottom: "1rem" }}>
@@ -509,7 +507,7 @@ function TriggerActionModal({
       <div className="modal__footer">
         <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
         <button className="btn btn--primary" onClick={handleConfirm} disabled={saving}>
-          {saving ? "Sending…" : `Confirm ${labelActionType(type)}`}
+          {saving ? "Sending…" : `Confirm ${type === "pause" ? "Pause" : "Resume"}`}
         </button>
       </div>
     </Modal>

@@ -11,7 +11,7 @@ export type TransactionStatus = "awaiting_review" | "under_review" | "reviewed";
 
 export type Finding = "unsubstantiated" | "non_compliance" | "ISP";
 
-export type ActionType = "notification" | "pause" | "release_withdraw";
+export type ActionType = "notification" | "pause" | "resume";
 
 export type ActionRecipient = "B&C" | "ER" | "all";
 
@@ -54,6 +54,8 @@ export interface Transaction {
   cohort: TranchType;
   tranche_number: number;
   behaviours: BehaviourFlag[];
+  bc_status: "paused" | "active";
+  er_status: "paused" | "active";
   created_at: string;
   updated_at: string;
 }
@@ -139,7 +141,7 @@ export function labelFinding(f: Finding): string {
 
 export function labelActionType(t: ActionType): string {
   const map: Record<ActionType, string> = {
-    notification: "Case Opened", pause: "Pause", release_withdraw: "Release / Withdraw",
+    notification: "Case Opened", pause: "Pause", resume: "Resume",
   };
   return map[t];
 }

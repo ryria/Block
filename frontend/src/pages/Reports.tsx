@@ -25,7 +25,7 @@ const FINDING_COLOUR: Record<string, string> = {
 const ACTION_COLOUR: Record<string, string> = {
   notification: "#2563eb",
   pause: "#d97706",
-  release_withdraw: "#dc2626",
+  resume: "#16a34a",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -42,6 +42,12 @@ function avg(nums: number[]): number | null {
 
 function formatDate(iso: string) {
   return iso.slice(0, 10);
+}
+
+function dateFromDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 // ── CSS Bar Chart ─────────────────────────────────────────────────────────────
@@ -71,12 +77,25 @@ function HBar({ data, emptyMsg = "No data" }: { data: BarDatum[]; emptyMsg?: str
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+const PRESETS = [
+  { label: "30d", days: 30 },
+  { label: "3m",  days: 90 },
+  { label: "6m",  days: 180 },
+  { label: "1y",  days: 365 },
+  { label: "3y",  days: 1095 },
+  { label: "All", days: 0 },
+];
+
 export default function Reports() {
   const [cases, setCases] = useState<Case[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [actions, setActions] = useState<CaseAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Date filter — default to 1y
+  const [dateFrom, setDateFrom] = useState(() => dateFromDaysAgo(365));
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     Promise.all([casesApi.list(), usersApi.list(), actionsApi.listAll()])
@@ -88,22 +107,50 @@ export default function Reports() {
   if (loading) return <div className="loading">Loading reports…</div>;
   if (error) return <div className="alert alert--error">{error}</div>;
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Date filter helpers ───────────────────────────────────────────────────
 
-  const openCases = cases.filter((c) => c.pipeline_status !== "closed");
-  const closedCases = cases.filter((c) => c.pipeline_status === "closed");
+  function applyPreset(days: number) {
+    if (days === 0) {
+      setDateFrom("");
+      setDateTo("");
+    } else {
+      setDateFrom(dateFromDaysAgo(days));
+      setDateTo("");
+    }
+  }
+
+  function isActivePreset(days: number): boolean {
+    if (days === 0) return !dateFrom && !dateTo;
+    if (dateTo) return false;
+    if (!dateFrom) return false;
+    return dateFrom === dateFromDaysAgo(days);
+  }
+
+  // ── Filtered cases ────────────────────────────────────────────────────────
+
+  const filteredCases = cases.filter((c) => {
+    const d = c.created_at.slice(0, 10);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
+    return true;
+  });
+
+  // ── Derived data ─────────────────────────────────────────────────────────
+
+  const openCases = filteredCases.filter((c) => c.pipeline_status !== "closed");
+  const closedCases = filteredCases.filter((c) => c.pipeline_status === "closed");
 
   // Status distribution
   const statusData: BarDatum[] = CASE_STATUSES.map((s) => ({
     label: labelCaseStatus(s),
-    value: cases.filter((c) => c.pipeline_status === s).length,
+    value: filteredCases.filter((c) => c.pipeline_status === s).length,
     colour: STATUS_COLOUR[s],
   }));
 
   // Finding distribution
   const findingData: BarDatum[] = FINDINGS.map((f) => ({
     label: labelFinding(f),
-    value: cases.filter((c) => c.finding === f).length,
+    value: filteredCases.filter((c) => c.finding === f).length,
     colour: FINDING_COLOUR[f],
   }));
 
@@ -121,16 +168,18 @@ export default function Reports() {
     colour: min >= 31 ? "#dc2626" : min >= 15 ? "#d97706" : "#2563eb",
   }));
 
-  // Action type breakdown
-  const actionTypes: Array<"notification" | "pause" | "release_withdraw"> = ["notification", "pause", "release_withdraw"];
+  // Action type breakdown (filter actions by case date range via filteredCases set)
+  const filteredCaseIds = new Set(filteredCases.map((c) => c.id));
+  const filteredActions = actions.filter((a) => filteredCaseIds.has(a.case_id));
+  const actionTypes: Array<"notification" | "pause" | "resume"> = ["notification", "pause", "resume"];
   const actionData: BarDatum[] = actionTypes.map((t) => ({
     label: labelActionType(t),
-    value: actions.filter((a) => a.type === t).length,
+    value: filteredActions.filter((a) => a.type === t).length,
     colour: ACTION_COLOUR[t],
   }));
 
   // Behaviour breakdown
-  const allTransactions = cases.flatMap((c) => c.transactions ?? []);
+  const allTransactions = filteredCases.flatMap((c) => c.transactions ?? []);
   const behaviourData: BarDatum[] = BEHAVIOUR_FLAGS.map(({ key, label }) => ({
     label,
     value: allTransactions.filter((t) => t.behaviours?.includes(key as BehaviourFlag)).length,
@@ -140,14 +189,14 @@ export default function Reports() {
     key,
     label,
     txnCount: allTransactions.filter((t) => t.behaviours?.includes(key as BehaviourFlag)).length,
-    caseCount: cases.filter((c) =>
+    caseCount: filteredCases.filter((c) =>
       (c.transactions ?? []).some((t) => t.behaviours?.includes(key as BehaviourFlag))
     ).length,
   }));
 
   // Analyst performance
   const analystRows = users.map((u) => {
-    const mine = cases.filter((c) => c.assigned_user_id === u.id);
+    const mine = filteredCases.filter((c) => c.assigned_user_id === u.id);
     const openMine = mine.filter((c) => c.pipeline_status !== "closed");
     const closedMine = mine.filter((c) => c.pipeline_status === "closed" && c.closed_at);
     return {
@@ -158,19 +207,17 @@ export default function Reports() {
       isp: mine.filter((c) => c.finding === "ISP").length,
       avgDaysOpen: avg(openMine.map(daysOpen)),
       avgDaysToClose: avg(closedMine.map((c) => {
-        const days = Math.floor((new Date(c.closed_at!).getTime() - new Date(c.created_at).getTime()) / 86400000);
-        return days;
+        return Math.floor((new Date(c.closed_at!).getTime() - new Date(c.created_at).getTime()) / 86400000);
       })),
     };
   });
 
   // Open cases sorted by age
-  const openByAge = [...openCases]
-    .sort((a, b) => daysOpen(b) - daysOpen(a));
+  const openByAge = [...openCases].sort((a, b) => daysOpen(b) - daysOpen(a));
 
   // Recent actions with case reference
-  const caseMap = Object.fromEntries(cases.map((c) => [c.id, c]));
-  const recentActions = actions.slice(0, 20);
+  const caseMap = Object.fromEntries(filteredCases.map((c) => [c.id, c]));
+  const recentActions = filteredActions.slice(0, 20);
 
   const avgOpenDays = avg(openCases.map(daysOpen));
   const avgCloseDays = avg(closedCases.filter((c) => c.closed_at).map((c) => {
@@ -183,9 +230,29 @@ export default function Reports() {
         <div>
           <h1 className="page__title">Reporting</h1>
           <p className="page__subtitle">
-            Metrics across {cases.length} case{cases.length !== 1 ? "s" : ""}
+            Filtered: {filteredCases.length} of {cases.length} case{cases.length !== 1 ? "s" : ""}
             {" "}· {openCases.length} open · {closedCases.length} closed
           </p>
+        </div>
+      </div>
+
+      {/* ── Date Filter ───────────────────────────────────────────────────────── */}
+      <div className="date-filter">
+        <div className="date-filter__presets">
+          {PRESETS.map(({ label, days }) => (
+            <button
+              key={label}
+              className={`preset-btn${isActivePreset(days) ? " active" : ""}`}
+              onClick={() => applyPreset(days)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="date-filter__inputs">
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <span>–</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
       </div>
 
@@ -218,7 +285,7 @@ export default function Reports() {
             <tbody>
               <tr>
                 <td className="report-metric-label">Total cases</td>
-                <td className="report-metric-value">{cases.length}</td>
+                <td className="report-metric-value">{filteredCases.length}</td>
               </tr>
               <tr>
                 <td className="report-metric-label">Open cases</td>
@@ -257,7 +324,7 @@ export default function Reports() {
               <tr>
                 <td className="report-metric-label">ISP findings</td>
                 <td className="report-metric-value report-metric-value--isp">
-                  {cases.filter((c) => c.finding === "ISP").length}
+                  {filteredCases.filter((c) => c.finding === "ISP").length}
                 </td>
               </tr>
             </tbody>
@@ -343,7 +410,7 @@ export default function Reports() {
               ))}
               {/* Unassigned row */}
               {(() => {
-                const unassigned = cases.filter((c) => !c.assigned_user_id);
+                const unassigned = filteredCases.filter((c) => !c.assigned_user_id);
                 const openU = unassigned.filter((c) => c.pipeline_status !== "closed");
                 const closedU = unassigned.filter((c) => c.pipeline_status === "closed" && c.closed_at);
                 return (
@@ -373,20 +440,20 @@ export default function Reports() {
             <tbody>
               <tr>
                 <td className="report-metric-label">Total actions</td>
-                <td className="report-metric-value">{actions.length}</td>
+                <td className="report-metric-value">{filteredActions.length}</td>
               </tr>
               <tr>
                 <td className="report-metric-label">Pause actions</td>
-                <td className="report-metric-value">{actions.filter((a) => a.type === "pause").length}</td>
+                <td className="report-metric-value">{filteredActions.filter((a) => a.type === "pause").length}</td>
               </tr>
               <tr>
-                <td className="report-metric-label">Release / Withdraw actions</td>
-                <td className="report-metric-value">{actions.filter((a) => a.type === "release_withdraw").length}</td>
+                <td className="report-metric-label">Resume actions</td>
+                <td className="report-metric-value">{filteredActions.filter((a) => a.type === "resume").length}</td>
               </tr>
               <tr>
                 <td className="report-metric-label">Cases with actions</td>
                 <td className="report-metric-value">
-                  {new Set(actions.filter((a) => a.type !== "notification").map((a) => a.case_id)).size}
+                  {new Set(filteredActions.filter((a) => a.type !== "notification").map((a) => a.case_id)).size}
                 </td>
               </tr>
             </tbody>
@@ -421,7 +488,7 @@ export default function Reports() {
                         <td>
                           <span
                             className="action-badge"
-                            style={{ background: ACTION_COLOUR[a.type] + "22", color: ACTION_COLOUR[a.type] }}
+                            style={{ background: (ACTION_COLOUR[a.type] ?? "#9ca3af") + "22", color: ACTION_COLOUR[a.type] ?? "#9ca3af" }}
                           >
                             {labelActionType(a.type)}
                           </span>
