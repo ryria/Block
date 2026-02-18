@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { casesApi, transactionsApi, usersApi, actionsApi } from "../api";
-import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding, CaseAction, ActionType } from "../types";
+import { casesApi, transactionsApi, usersApi, actionsApi, bulkApi, tranchesApi } from "../api";
+import type { FauxTxnDetail } from "../api";
+import type { Case, Transaction, User, CaseStatus, TransactionStatus, Finding, CaseAction, ActionType, BehaviourFlag } from "../types";
 import {
-  CASE_STATUSES, TRANSACTION_STATUSES, FINDINGS,
-  labelCaseStatus, labelTransactionStatus, labelFinding, labelActionType,
+  CASE_STATUSES, TRANSACTION_STATUSES, FINDINGS, BEHAVIOUR_FLAGS,
+  labelCaseStatus, labelTransactionStatus, labelFinding, labelActionType, labelRecipient,
 } from "../types";
 import FindingBadge from "../components/FindingBadge";
 import StatusBadge from "../components/StatusBadge";
@@ -23,6 +24,7 @@ export default function CaseDetail() {
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
   const [triggerAction, setTriggerAction] = useState<ActionType | null>(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   // Inline case edit state
   const [editForm, setEditForm] = useState({
@@ -89,9 +91,12 @@ export default function CaseDetail() {
     navigate("/");
   };
 
-  const handleTriggerAction = async (type: ActionType, note?: string) => {
+  const handleTriggerAction = async (type: ActionType, note?: string, transactionIds?: number[]) => {
     if (!caseData) return;
-    await actionsApi.create({ case_id: caseData.id, type, note });
+    const recipient =
+      type === "pause" ? "ER" as const :
+      type === "release_withdraw" ? "B&C" as const : "all" as const;
+    await actionsApi.create({ case_id: caseData.id, type, recipient, transaction_ids: transactionIds, note });
     const updated = await actionsApi.list(caseData.id);
     setCaseActions(updated);
   };
@@ -232,6 +237,22 @@ export default function CaseDetail() {
         </div>
       </div>
 
+      {/* Case-level behaviours */}
+      {caseData.behaviours.length > 0 && (
+        <div className="card">
+          <h2 className="card__title">Behaviours Identified</h2>
+          <p className="muted" style={{ fontSize: "0.85rem", marginBottom: "1rem" }}>
+            Aggregated from all transactions in this case.
+          </p>
+          <div className="txn-card__behaviours">
+            {caseData.behaviours.map((b) => {
+              const found = BEHAVIOUR_FLAGS.find((f) => f.key === b);
+              return <span key={b} className="behaviour-tag behaviour-tag--lg">{found?.label ?? b}</span>;
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="card">
         <div className="card__header">
@@ -243,8 +264,8 @@ export default function CaseDetail() {
             <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("pause")}>
               Pause
             </button>
-            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("withdraw")}>
-              Withdraw
+            <button className="btn btn--secondary btn--sm" onClick={() => setTriggerAction("release_withdraw")}>
+              Release / Withdraw
             </button>
           </div>
         </div>
@@ -254,7 +275,7 @@ export default function CaseDetail() {
         ) : (
           <div className="action-list">
             {caseActions.map((a) => (
-              <ActionRow key={a.id} action={a} />
+              <ActionRow key={a.id} action={a} caseTransactions={caseData.transactions} />
             ))}
           </div>
         )}
@@ -267,27 +288,57 @@ export default function CaseDetail() {
             Transactions
             <span className="count-badge">{caseData.transactions.length}</span>
           </h2>
-          <button className="btn btn--primary btn--sm" onClick={() => setShowAddTxn(true)}>
-            + Add Transaction
+          <button className="btn btn--primary btn--sm" onClick={() => setShowBulkUpload(true)}>
+            + Bulk Upload
           </button>
         </div>
 
         {caseData.transactions.length === 0 ? (
-          <p className="muted">No transactions yet. Add one to begin reviewing.</p>
+          <p className="muted">No transactions yet.</p>
         ) : (
-          <div className="txn-list">
-            {caseData.transactions.map((txn) => (
-              <TransactionRow
-                key={txn.id}
-                txn={txn}
-                onEdit={() => setEditingTxn(txn)}
-                onDelete={async () => {
-                  if (!confirm(`Delete transaction ${txn.reference}?`)) return;
-                  await transactionsApi.delete(txn.id);
-                  load();
-                }}
-              />
-            ))}
+          <div className="tranche-groups">
+            {[...caseData.tranches]
+              .sort((a, b) => {
+                if (a.type === "catalyst") return -1;
+                if (b.type === "catalyst") return 1;
+                return a.number - b.number;
+              })
+              .map((tranche) => {
+                const trancheTxns = caseData.transactions.filter(
+                  (t) => t.cohort === tranche.type && t.tranche_number === tranche.number
+                );
+                const trancheLabel =
+                  tranche.type === "catalyst"
+                    ? "Catalyst Tranche"
+                    : `Historical Tranche #${tranche.number}${tranche.date_range ? ` — ${tranche.date_range}` : ""}`;
+                return (
+                  <div key={tranche.id} className="tranche-group">
+                    <div className="tranche-group__header">
+                      <span className={`tranche-type-badge ${tranche.type === "catalyst" ? "tranche-type-badge--catalyst" : "tranche-type-badge--historical"}`}>
+                        {tranche.type === "catalyst" ? "Catalyst" : "Historical"}
+                      </span>
+                      <span className="tranche-group__label">{trancheLabel}</span>
+                      <span className="muted" style={{ fontSize: "0.8rem" }}>
+                        {trancheTxns.length} transaction{trancheTxns.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="txn-list">
+                      {trancheTxns.map((txn) => (
+                        <TransactionRow
+                          key={txn.id}
+                          txn={txn}
+                          onEdit={() => setEditingTxn(txn)}
+                          onDelete={async () => {
+                            if (!confirm(`Delete transaction ${txn.reference}?`)) return;
+                            await transactionsApi.delete(txn.id);
+                            load();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
@@ -296,9 +347,10 @@ export default function CaseDetail() {
       {triggerAction && (
         <TriggerActionModal
           type={triggerAction}
+          transactions={caseData.transactions}
           onClose={() => setTriggerAction(null)}
-          onConfirm={async (note) => {
-            await handleTriggerAction(triggerAction, note);
+          onConfirm={async (note, transactionIds) => {
+            await handleTriggerAction(triggerAction, note, transactionIds);
             setTriggerAction(null);
           }}
         />
@@ -317,24 +369,44 @@ export default function CaseDetail() {
           onSaved={() => { setEditingTxn(null); load(); }}
         />
       )}
+      {showBulkUpload && (
+        <BulkUploadModal
+          caseId={caseData.id}
+          existingHistoricalCount={caseData.tranches.filter((t) => t.type === "historical").length}
+          onClose={() => setShowBulkUpload(false)}
+          onSaved={() => { setShowBulkUpload(false); load(); }}
+        />
+      )}
     </div>
   );
 }
 
 // ── Action Row ─────────────────────────────────────────────────────────────────
 
-function ActionRow({ action }: { action: CaseAction }) {
-  const typeClass = action.type === "notification"
-    ? "action-badge--info"
-    : action.type === "pause"
-    ? "action-badge--amber"
-    : "action-badge--red";
+function ActionRow({ action, caseTransactions }: { action: CaseAction; caseTransactions: Transaction[] }) {
+  const typeClass =
+    action.type === "notification" ? "action-badge--info" :
+    action.type === "pause" ? "action-badge--amber" : "action-badge--red";
+  const recipientClass =
+    action.recipient === "ER" ? "recipient-badge--er" :
+    action.recipient === "B&C" ? "recipient-badge--bc" : "recipient-badge--all";
+  const linkedTxns = caseTransactions.filter((t) => action.transaction_ids.includes(t.id));
 
   return (
     <div className="action-row">
       <div className="action-row__left">
         <span className={`action-badge ${typeClass}`}>{labelActionType(action.type)}</span>
-        <span className="action-row__sent">Sent to: {action.sent_to.join(", ")}</span>
+        <span className={`recipient-badge ${recipientClass}`}>→ {labelRecipient(action.recipient)}</span>
+        {action.tranche_ref && <span className="tranche-tag">{action.tranche_ref}</span>}
+      </div>
+      <div className="action-row__middle">
+        {linkedTxns.length > 0 && (
+          <span className="action-txn-list muted" style={{ fontSize: "0.8rem" }}>
+            {linkedTxns.length > 3
+              ? `${linkedTxns.slice(0, 3).map((t) => t.reference).join(", ")} +${linkedTxns.length - 3} more`
+              : linkedTxns.map((t) => t.reference).join(", ")}
+          </span>
+        )}
       </div>
       <div className="action-row__right">
         {action.note && <span className="action-row__note">{action.note}</span>}
@@ -362,15 +434,19 @@ function TransactionRow({
         </div>
       </div>
       {txn.description && <p className="txn-card__desc">{txn.description}</p>}
-
       <div className="txn-pipeline">
         <PipelineStepper type="transaction" current={txn.pipeline_status} />
       </div>
-
-      {txn.notes && (
-        <div className="txn-card__notes">
-          <strong>Notes:</strong> {txn.notes}
+      {txn.behaviours.length > 0 && (
+        <div className="txn-card__behaviours">
+          {txn.behaviours.map((b) => {
+            const found = BEHAVIOUR_FLAGS.find((f) => f.key === b);
+            return <span key={b} className="behaviour-tag">{found?.label ?? b}</span>;
+          })}
         </div>
+      )}
+      {txn.notes && (
+        <div className="txn-card__notes"><strong>Notes:</strong> {txn.notes}</div>
       )}
       <div className="txn-card__actions">
         <button className="btn btn--ghost btn--sm" onClick={onEdit}>Edit</button>
@@ -382,32 +458,53 @@ function TransactionRow({
 
 // ── Trigger Action Modal ───────────────────────────────────────────────────────
 
-function TriggerActionModal({ type, onClose, onConfirm }: {
-  type: ActionType; onClose: () => void; onConfirm: (note?: string) => Promise<void>;
+function TriggerActionModal({
+  type, transactions, onClose, onConfirm,
+}: {
+  type: ActionType;
+  transactions: Transaction[];
+  onClose: () => void;
+  onConfirm: (note?: string, transactionIds?: number[]) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const toggleTxn = (id: number) =>
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+
+  const recipientLabel = type === "pause" ? "ER" : type === "release_withdraw" ? "B&C" : "B&C & ER";
 
   const handleConfirm = async () => {
     setSaving(true);
-    await onConfirm(note.trim() || undefined);
+    await onConfirm(note.trim() || undefined, selectedIds.length ? selectedIds : undefined);
     setSaving(false);
   };
 
   return (
-    <Modal title={`${labelActionType(type)} — Send to B&C and ER`} onClose={onClose}>
+    <Modal title={`${labelActionType(type)} — Send to ${recipientLabel}`} onClose={onClose}>
       <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
-        This action will be recorded and sent to <strong>B&C</strong> and <strong>ER</strong>.
+        This action will be sent to <strong>{recipientLabel}</strong>.
       </p>
+      {transactions.length > 0 && (
+        <div style={{ marginBottom: "1rem" }}>
+          <p style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem" }}>
+            Associated Transactions <span className="muted">(optional)</span>
+          </p>
+          <div className="txn-checkbox-list">
+            {transactions.map((t) => (
+              <label key={t.id} className="txn-checkbox">
+                <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleTxn(t.id)} />
+                <span>{t.reference}</span>
+                {t.transaction_date && <span className="muted" style={{ fontSize: "0.8rem" }}> — {t.transaction_date}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
       <label className="form-label">
         Note <span className="muted">(optional)</span>
-        <textarea
-          className="textarea"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={3}
-          placeholder="Reason or additional context…"
-        />
+        <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Reason or additional context…" />
       </label>
       <div className="modal__footer">
         <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
@@ -481,9 +578,18 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
     pipeline_status: txn.pipeline_status as TransactionStatus,
     finding: txn.finding as Finding,
     notes: txn.notes ?? "",
+    behaviours: [...txn.behaviours] as BehaviourFlag[],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleBehaviour = (flag: BehaviourFlag) =>
+    setForm((prev) => ({
+      ...prev,
+      behaviours: prev.behaviours.includes(flag)
+        ? prev.behaviours.filter((b) => b !== flag)
+        : [...prev.behaviours, flag],
+    }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -530,6 +636,19 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
           Notes
           <textarea className="textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} placeholder="Review notes, evidence, comments…" />
         </label>
+        <div className="form-label form-label--full">
+          <span style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600, fontSize: "0.875rem" }}>
+            Behaviours Identified
+          </span>
+          <div className="behaviour-checkbox-grid">
+            {BEHAVIOUR_FLAGS.map(({ key, label }) => (
+              <label key={key} className="txn-checkbox">
+                <input type="checkbox" checked={form.behaviours.includes(key)} onChange={() => toggleBehaviour(key)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="modal__footer">
         <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
@@ -537,6 +656,139 @@ function EditTransactionModal({ txn, onClose, onSaved }: {
           {saving ? "Saving…" : "Save Changes"}
         </button>
       </div>
+    </Modal>
+  );
+}
+
+// ── Bulk Upload Modal ─────────────────────────────────────────────────────────
+
+function BulkUploadModal({ caseId, existingHistoricalCount, onClose, onSaved }: {
+  caseId: number;
+  existingHistoricalCount: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [rawIds, setRawIds] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookedUp, setLookedUp] = useState<FauxTxnDetail[]>([]);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState("");
+  const [sendPause, setSendPause] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const nextTrancheNumber = existingHistoricalCount + 1;
+  const parseIds = () => rawIds.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+
+  const handleFetch = async () => {
+    const ids = parseIds();
+    if (!ids.length) { setLookupError("Paste at least one transaction ID"); return; }
+    setLookupLoading(true);
+    setLookupError(null);
+    try {
+      const results = await bulkApi.lookup(ids);
+      setLookedUp(results);
+      setStep(2);
+    } catch {
+      setLookupError("Lookup failed — please try again");
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    const trancheRef = `Historical Tranche #${nextTrancheNumber}`;
+    try {
+      await tranchesApi.create({ case_id: caseId, type: "historical", date_range: dateRange.trim() || undefined });
+      await bulkApi.bulkCreate({
+        case_id: caseId,
+        transactions: lookedUp,
+        cohort: "historical",
+        tranche_number: nextTrancheNumber,
+        tranche_ref: trancheRef,
+        send_pause: sendPause,
+      });
+      onSaved();
+    } catch {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Bulk Upload — Historical Tranche" onClose={onClose}>
+      {step === 1 && (
+        <>
+          <p className="muted" style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
+            Paste transaction IDs to add as <strong>Historical Tranche #{nextTrancheNumber}</strong>.
+          </p>
+          {lookupError && <div className="alert alert--error" style={{ marginBottom: "1rem" }}>{lookupError}</div>}
+          <label className="form-label">
+            Transaction IDs <span className="muted">(one per line or comma-separated)</span>
+            <textarea
+              className="textarea"
+              value={rawIds}
+              onChange={(e) => setRawIds(e.target.value)}
+              rows={6}
+              placeholder={"TXN-00001\nTXN-00002\n..."}
+            />
+          </label>
+          {rawIds.trim() && (
+            <p className="muted" style={{ fontSize: "0.8rem", marginBottom: "0.75rem" }}>
+              {parseIds().length} ID{parseIds().length !== 1 ? "s" : ""} detected
+            </p>
+          )}
+          <div className="modal__footer">
+            <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button className="btn btn--primary" onClick={handleFetch} disabled={lookupLoading || !rawIds.trim()}>
+              {lookupLoading ? "Fetching…" : "Fetch Details"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <p className="muted" style={{ marginBottom: "0.75rem", fontSize: "0.875rem" }}>
+            {lookedUp.length} transaction{lookedUp.length !== 1 ? "s" : ""} retrieved. Configure tranche below.
+          </p>
+          <div className="table-wrap" style={{ marginBottom: "1rem", maxHeight: "200px", overflowY: "auto" }}>
+            <table className="table">
+              <thead><tr><th>Reference</th><th>Date</th><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                {lookedUp.map((t) => (
+                  <tr key={t.input_id}>
+                    <td><strong>{t.reference}</strong></td>
+                    <td className="muted">{t.date}</td>
+                    <td>{t.description}</td>
+                    <td>{t.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="form-grid" style={{ marginBottom: "1rem" }}>
+            <label className="form-label">
+              Tranche
+              <input className="input" value={`Historical Tranche #${nextTrancheNumber}`} readOnly style={{ background: "var(--surface)", color: "var(--text-muted)" }} />
+            </label>
+            <label className="form-label">
+              Date Range <span className="muted">(optional)</span>
+              <input className="input" value={dateRange} onChange={(e) => setDateRange(e.target.value)} placeholder="e.g. Jan 2024 – Dec 2024" />
+            </label>
+          </div>
+          <label className="txn-checkbox" style={{ marginBottom: "1.25rem" }}>
+            <input type="checkbox" checked={sendPause} onChange={(e) => setSendPause(e.target.checked)} />
+            <span>Send pause action to <strong>B&C</strong> for these transactions</span>
+          </label>
+          <div className="modal__footer">
+            <button className="btn btn--ghost" onClick={() => setStep(1)}>← Back</button>
+            <button className="btn btn--primary" onClick={handleSubmit} disabled={saving}>
+              {saving ? "Uploading…" : "Upload Transactions"}
+            </button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

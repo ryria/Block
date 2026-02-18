@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { casesApi, usersApi, actionsApi } from "../api";
 import type { Case, User, CaseAction } from "../types";
-import { labelCaseStatus, labelFinding, labelActionType, CASE_STATUSES, FINDINGS } from "../types";
+import { labelCaseStatus, labelFinding, labelActionType, CASE_STATUSES, FINDINGS, BEHAVIOUR_FLAGS } from "../types";
+import type { BehaviourFlag } from "../types";
 
 // ── Colour maps ────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ const FINDING_COLOUR: Record<string, string> = {
 const ACTION_COLOUR: Record<string, string> = {
   notification: "#2563eb",
   pause: "#d97706",
-  withdraw: "#dc2626",
+  release_withdraw: "#dc2626",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -121,11 +122,27 @@ export default function Reports() {
   }));
 
   // Action type breakdown
-  const actionTypes: Array<"notification" | "pause" | "withdraw"> = ["notification", "pause", "withdraw"];
+  const actionTypes: Array<"notification" | "pause" | "release_withdraw"> = ["notification", "pause", "release_withdraw"];
   const actionData: BarDatum[] = actionTypes.map((t) => ({
     label: labelActionType(t),
     value: actions.filter((a) => a.type === t).length,
     colour: ACTION_COLOUR[t],
+  }));
+
+  // Behaviour breakdown
+  const allTransactions = cases.flatMap((c) => c.transactions ?? []);
+  const behaviourData: BarDatum[] = BEHAVIOUR_FLAGS.map(({ key, label }) => ({
+    label,
+    value: allTransactions.filter((t) => t.behaviours?.includes(key as BehaviourFlag)).length,
+    colour: "#0369a1",
+  }));
+  const behaviourTableData = BEHAVIOUR_FLAGS.map(({ key, label }) => ({
+    key,
+    label,
+    txnCount: allTransactions.filter((t) => t.behaviours?.includes(key as BehaviourFlag)).length,
+    caseCount: cases.filter((c) =>
+      (c.transactions ?? []).some((t) => t.behaviours?.includes(key as BehaviourFlag))
+    ).length,
   }));
 
   // Analyst performance
@@ -363,8 +380,8 @@ export default function Reports() {
                 <td className="report-metric-value">{actions.filter((a) => a.type === "pause").length}</td>
               </tr>
               <tr>
-                <td className="report-metric-label">Withdraw actions</td>
-                <td className="report-metric-value">{actions.filter((a) => a.type === "withdraw").length}</td>
+                <td className="report-metric-label">Release / Withdraw actions</td>
+                <td className="report-metric-value">{actions.filter((a) => a.type === "release_withdraw").length}</td>
               </tr>
               <tr>
                 <td className="report-metric-label">Cases with actions</td>
@@ -413,6 +430,42 @@ export default function Reports() {
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Section 6: Behaviours ──────────────────────────────────────────────── */}
+      <h2 className="report-section-title">Behaviours Identified</h2>
+      <div className="report-grid">
+        <div className="card">
+          <h3 className="card__title">Transactions by Behaviour</h3>
+          <HBar data={behaviourData} emptyMsg="No behaviours recorded" />
+        </div>
+        <div className="card">
+          <h3 className="card__title">Behaviour Breakdown</h3>
+          {behaviourTableData.every((b) => b.txnCount === 0) ? (
+            <p className="muted report-empty">No behaviours recorded.</p>
+          ) : (
+            <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Behaviour</th>
+                    <th className="center">Transactions</th>
+                    <th className="center">Cases</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {behaviourTableData.map((b) => (
+                    <tr key={b.key}>
+                      <td>{b.label}</td>
+                      <td className="center">{b.txnCount || <span className="muted">0</span>}</td>
+                      <td className="center">{b.caseCount || <span className="muted">0</span>}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
